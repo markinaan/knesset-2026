@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Knesset 2026 Live Count</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="d3.min.js"></script>
+<style>
+:root{
+  --color-bg:#F7F6F2; --color-panel:#FFFFFF; --color-fg:#1A1A18; --color-fg-muted:#6B6A64; --color-border-line:#E3E1DA;
+  --color-ok:#2E7D4F; --color-warn:#A86A12; --color-bad:#B3261E;
+  --cds-chart-muted:#C4C2B8; --cds-chart-grid:#ECEAE3; --cds-chart-axis:#CFCDC5; --cds-chart-reference:#6B6A64; --cds-chart-status-critical:#C8462E;
+  --cds-surface-popover:#FFFFFF; --cds-border:#E3E1DA; --cds-shadow-popover:0 6px 20px rgba(0,0,0,.12);
+  --font-anthropic-sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-anthropic-serif:'Source Serif 4',Georgia,'Times New Roman',serif;
+  --cds-font-size-caption:.8rem; --cds-font-size-body:.92rem; --cds-font-size-heading:1.05rem; --cds-font-size-title:1.75rem;
+  --cds-font-weight-medium:500;
+  --cds-gap-xs:4px; --cds-gap-sm:8px; --cds-gap-md:16px; --cds-gap-lg:24px; --cds-gap-xl:32px;
+  --cds-pad-xs:6px; --cds-pad-sm:10px; --cds-pad-md:14px; --cds-pad-lg:18px; --cds-pad-xl:24px;
+  --cds-radius:10px; --cds-dur-slow:.3s;
+  --c0:#3B6FD4; --c1:#E06A3A;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --color-bg:#161614; --color-panel:#1F1F1C; --color-fg:#ECEBE6; --color-fg-muted:#A3A198; --color-border-line:#33322E;
+  --color-ok:#6BCB8E; --color-warn:#E0A84A; --color-bad:#FF8A80;
+  --cds-chart-muted:#55534C; --cds-chart-grid:#2A2926; --cds-chart-axis:#3D3C37; --cds-chart-reference:#A3A198; --cds-chart-status-critical:#F07A5E;
+  --cds-surface-popover:#262622; --cds-border:#3A3934; --cds-shadow-popover:0 6px 20px rgba(0,0,0,.4);
+  --c0:#7FA2F0; --c1:#F08C5E; color-scheme:dark; } }
+html,body{margin:0;background:var(--color-bg);color:var(--color-fg);font-family:var(--font-anthropic-sans);}
+body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 40px;}
+#dash-root{max-width:1180px;margin:0 auto;}
+.kn th.r,.kn td.r{padding-left:14px;white-space:nowrap}
+.foot-src{font-size:.78rem;color:var(--color-fg-muted);margin-top:24px}
+.foot-src a{color:inherit}
+</style>
+<script>
+(function(){
+  const RAW={"parties": [{"party": "Likud", "leader": "Netanyahu", "bloc": "Netanyahu bloc", "seats": 27}, {"party": "Yashar!", "leader": "Eisenkot", "bloc": "Eisenkot bloc", "seats": 21}, {"party": "B'Yachad", "leader": "Bennett", "bloc": "Eisenkot bloc", "seats": 11}, {"party": "Joint List", "leader": "Jabareen", "bloc": "Arab parties", "seats": 11}, {"party": "Democrats", "leader": "Golan", "bloc": "Eisenkot bloc", "seats": 9}, {"party": "UTJ", "leader": "Asher", "bloc": "Netanyahu bloc", "seats": 9}, {"party": "Yisrael Beytenu", "leader": "Liberman", "bloc": "Eisenkot bloc", "seats": 8}, {"party": "Shas", "leader": "Deri", "bloc": "Netanyahu bloc", "seats": 7}, {"party": "Otzma Yehudit", "leader": "Ben-Gvir", "bloc": "Netanyahu bloc", "seats": 7}, {"party": "Religious Zionism–Zehut", "leader": "Smotrich", "bloc": "Netanyahu bloc", "seats": 6}, {"party": "Ra'am", "leader": "Abbas", "bloc": "Arab parties", "seats": 4}], "status": [{"counted_pct": 50.1, "as_of": "2026-10-28T08:00:00+02:00", "majority": 61, "threshold_pct": 3.25}], "below": [{"party": "Reservists–Economic", "leader": "Hendel & Zelekha", "vote_pct": 2.72}, {"party": "Am Israel", "leader": "Winter", "vote_pct": 1.77}], "odds": [{"outcome": "Deadlock → new election", "probability": 65, "why": "No path to 61 holds unless parties break major pledges."}, {"outcome": "Eisenkot bloc + Arab parties", "probability": 20, "why": "Needs Bennett and Liberman to accept relying on both Arab parties, and the Joint List to vote for it."}, {"outcome": "Unity or rotation with Likud", "probability": 10, "why": "Likud + Yashar! + B'Yachad is 59; needs another partner and Eisenkot to break his no-Netanyahu pledge."}, {"outcome": "Other (count shifts, defections)", "probability": 5, "why": "Final count or defections change the arithmetic."}]};
+  const calcs={}, draws={}, cache={};
+  const css=(v)=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  window.dash={
+    get colors(){return [css('--c0'),css('--c1')];},
+    data(id){
+      if(RAW[id]) return {status:'ok',data:RAW[id],columns:Object.keys(RAW[id][0]||{})};
+      if(calcs[id]){ if(!cache[id]){const c=calcs[id]; cache[id]=c.fn(...c.inputs.map((i)=>dash.data(i).data));} return {status:'ok',data:cache[id]}; }
+      return {status:'missing',data:[]};
+    },
+    calc(id,c){calcs[id]=c;},
+    draw(name,fn){draws[name]=fn;},
+    onData(fn){fn();},
+    _run(){Object.entries(draws).forEach(([n,fn])=>document.querySelectorAll('[data-draw="'+n+'"]').forEach((el)=>{try{fn(el);}catch(e){console.error(n,e);}}));}
+  };
+  window.addEventListener('DOMContentLoaded',()=>{dash._run();let w=innerWidth;addEventListener('resize',()=>{if(innerWidth!==w){w=innerWidth;dash._run();}});});
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>dash._run());
+})();
+</script>
+</head>
+<body>
+<div id="dash-root">
+<style>
+.kn { font-family: var(--font-anthropic-sans); display: grid; gap: var(--cds-gap-lg); }
+.kn h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; }
+.kn .lede { margin: var(--cds-gap-xs) 0 0; color: var(--color-fg); }
+.kn .meta { margin: var(--cds-gap-xs) 0 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.kn .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: var(--cds-gap-md); }
+.kn .card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); }
+.kn .tile .lab { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); display: flex; align-items: center; gap: var(--cds-gap-xs); }
+.kn .tile .num { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; margin-top: var(--cds-gap-xs); }
+.kn .tile .sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-top: var(--cds-gap-xs); }
+.kn .sw { width: .6rem; height: .6rem; border-radius: 2px; display: inline-block; }
+.kn h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.kn .note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: var(--cds-gap-xs) 0 var(--cds-gap-md); }
+.kn .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: var(--cds-gap-md); }
+.kn .chart { position: relative; min-height: 4rem; }
+.kn .chart.parties { min-height: 22rem; }
+.kn table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: var(--cds-font-size-body); }
+.kn th { text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); border-bottom: 1px solid var(--color-border-line); padding: var(--cds-pad-xs) 0; }
+.kn td { padding: var(--cds-pad-xs) 0; border-bottom: 1px solid var(--color-border-line); }
+.kn th.r, .kn td.r { text-align: right; }
+.kn .tw { overflow-x: auto; }
+.kn td.req { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); padding-left: var(--cds-pad-sm); }
+.kn th.hide { padding-left: var(--cds-pad-sm); }
+@media (max-width: 640px) { .kn th.hide, .kn td.req { display: none; } }
+.kn td.vd { padding-left: var(--cds-pad-sm); }
+.kn .chart.odds { min-height: 9rem; margin-top: var(--cds-gap-md); }
+.kn .ok { color: var(--color-ok); } .kn .bad { color: var(--color-bad); }
+.kn .tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; }
+.kn [data-dash-source-state=empty] { color: transparent; }
+.kn [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+.kn .legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-bottom: var(--cds-gap-sm); }
+.kn .legend span { display: inline-flex; align-items: center; gap: var(--cds-gap-xs); }
+</style>
+
+<div class="kn">
+  <header>
+    <h1>Knesset 2026 — live count</h1>
+    <p class="lede"><b data-draw="leadBloc" data-source="leader" data-field="bloc" data-row="0">—</b> leads with <b data-draw="leadSeats" data-source="leader" data-field="seats" data-row="0">—</b> seats. A majority needs 61, and no bloc has it on its own.</p>
+    <p class="meta"><span data-draw="pct" data-source="status" data-field="counted_pct" data-row="0">—</span>% of ballots counted · updated <span data-draw="asof" data-source="status" data-field="as_of" data-row="0">—</span> · seats are a projection from the partial count</p>
+  </header>
+
+  <section class="tiles">
+    <div class="card tile"><div class="lab"><i class="sw bsw" data-b="0"></i>Netanyahu bloc</div><div class="num" data-draw="tileNet" data-source="blocs" data-field="seats" data-where="bloc=Netanyahu%20bloc">—</div><div class="sub">Likud, UTJ, Shas, Otzma, RZ–Zehut</div></div>
+    <div class="card tile"><div class="lab"><i class="sw bsw" data-b="1"></i>Eisenkot bloc</div><div class="num" data-draw="tileEis" data-source="blocs" data-field="seats" data-where="bloc=Eisenkot%20bloc">—</div><div class="sub">Yashar!, B'Yachad, Democrats, Yisrael Beytenu</div></div>
+    <div class="card tile"><div class="lab"><i class="sw bsw" data-b="2"></i>Arab parties</div><div class="num" data-draw="tileArab" data-source="blocs" data-field="seats" data-where="bloc=Arab%20parties">—</div><div class="sub">Joint List, Ra'am</div></div>
+  </section>
+
+  <section class="card">
+    <h2>Race to 61</h2>
+    <p class="note">Each bloc's seats out of 120; the line marks a majority.</p>
+    <div class="chart" data-draw="race" data-source="blocs"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Seats by party</h2>
+      <p class="note">Colored by bloc.</p>
+      <div class="legend"><span><i class="sw bsw" data-b="0"></i>Netanyahu bloc</span><span><i class="sw bsw" data-b="1"></i>Eisenkot bloc</span><span><i class="sw bsw" data-b="2"></i>Arab parties</span></div>
+      <div class="chart parties" data-draw="parties" data-source="parties"></div>
+    </section>
+
+    <section class="card">
+      <h2>Below the 3.25% threshold</h2>
+      <p class="note">Share of valid votes in the last reported count; their votes don't turn into seats.</p>
+      <table data-source="below" data-row-key="party">
+        <thead><tr><th data-field="party">Party</th><th data-field="leader">Leader</th><th class="r" data-field="vote_pct">Vote %</th></tr></thead>
+        <tbody data-draw="belowBody"></tbody>
+      </table>
+    </section>
+  </div>
+
+
+  <section class="card">
+    <h2>How likely is each outcome?</h2>
+    <p class="note">Claude's judgment from the current seat count and the parties' public pledges — not a statistical model.</p>
+    <div class="tile"><div class="lab">Deadlock → new election</div><div class="num"><span data-draw="deadlock" data-source="odds" data-field="probability" data-where="outcome=Deadlock%20%E2%86%92%20new%20election">—</span>%</div></div>
+    <div class="chart odds" data-draw="oddsChart" data-source="odds"></div>
+  </section>
+
+  <section class="card">
+    <h2>All outcome scenarios</h2>
+    <p class="note">Every way a government could form from these seats. A government needs more votes for than against — 61 guarantees it; less works only if others abstain or support it from outside. Arithmetic only, not whether the parties would agree.</p>
+    <div class="tw"><table data-source="scenarios" data-row-key="scenario">
+      <thead><tr><th data-field="scenario">Scenario</th><th class="r" data-field="for_">For</th><th class="r" data-field="against">Against</th><th class="r" data-field="gap">vs 61</th><th data-field="verdict">Arithmetic</th><th class="hide" data-field="requires">What it takes</th></tr></thead>
+      <tbody data-draw="scenBody"></tbody>
+    </table></div>
+  </section>
+
+
+  <p class="meta">Unofficial: numbers are entered by hand from the partial count as reported in the media. Double envelopes (soldiers and others) are counted last. The Central Elections Committee expects final results on Thursday, October 29, at noon. Official count: bechirot.gov.il; map by locality: elections.govmap.gov.il.</p>
+</div>
+
+<script>
+const BLOCS = ['Netanyahu bloc', 'Eisenkot bloc', 'Arab parties'];
+const MAJ = 61;
+window.knColor = (b) => {
+  const i = BLOCS.indexOf(b);
+  return i === 2 ? 'var(--cds-chart-muted)' : dash.colors[i === 0 ? 0 : 1];
+};
+document.querySelectorAll('.bsw').forEach((el) => { el.style.background = window.knColor(BLOCS[+el.dataset.b]); });
+
+dash.calc('blocs', {
+  title: 'Seats by bloc',
+  description: 'Each party\'s projected seats summed by its bloc.',
+  inputs: ['parties'],
+  fn: (parties) => ['Netanyahu bloc', 'Eisenkot bloc', 'Arab parties'].map((bloc) => ({
+    bloc, seats: parties.filter((p) => p.bloc === bloc).reduce((s, p) => s + Number(p.seats), 0)
+  }))
+});
+
+dash.calc('leader', {
+  title: 'Largest bloc',
+  description: 'The bloc with the most projected seats.',
+  inputs: ['blocs'],
+  fn: (blocs) => [blocs.slice().sort((a, b) => b.seats - a.seats)[0]]
+});
+
+dash.calc('scenarios', {
+  title: 'Coalition scenarios',
+  description: 'For each possible government: seats voting for, seats of the Netanyahu bloc or other parties assumed against, and the gap to 61.',
+  inputs: ['parties'],
+  fn: (parties) => {
+    const s = (f) => parties.filter(f).reduce((t, p) => t + Number(p.seats), 0);
+    const NB = (p) => p.bloc === 'Netanyahu bloc', EB = (p) => p.bloc === 'Eisenkot bloc';
+    const is = (n) => (p) => p.party === n;
+    const or = (...fs) => (p) => fs.some((f) => f(p));
+    const not = (f) => (p) => !f(p);
+    const rows = [
+      ['Netanyahu bloc alone', NB, not(NB), 'Every right-wing and Haredi party stays together; nothing else needed.'],
+      ['Eisenkot bloc alone', EB, not(EB), 'All four Eisenkot-bloc parties agree on a government.'],
+      ["Eisenkot bloc + Ra'am", or(EB, is("Ra'am")), not(or(EB, is("Ra'am"))), "Bennett and Liberman accept Ra'am as a coalition partner."],
+      ["Minority govt: Eisenkot + Ra'am, Joint List abstains", or(EB, is("Ra'am")), NB, "Joint List neither joins nor votes against; Bennett accepts relying on it."],
+      ['Eisenkot bloc + both Arab parties', not(NB), NB, 'Joint List joins or backs the government; never happened before in Israel.'],
+      ["Same, without B'Yachad (Bennett)", (p) => !NB(p) && p.party !== "B'Yachad", or(NB, is("B'Yachad")), "Bennett refuses; the rest go ahead with both Arab parties."],
+      ["Unity: Likud + Yashar! + B'Yachad", or(is('Likud'), is('Yashar!'), is("B'Yachad")), not(or(is('Likud'), is('Yashar!'), is("B'Yachad"))), 'Eisenkot and Bennett sit with Likud, likely under rotation or without Netanyahu as PM.'],
+      ['Unity: Likud + Yashar! + Yisrael Beytenu', or(is('Likud'), is('Yashar!'), is('Yisrael Beytenu')), not(or(is('Likud'), is('Yashar!'), is('Yisrael Beytenu'))), 'Same, with Liberman instead of Bennett.']
+    ];
+    const out = rows.map(([scenario, f, a, requires]) => {
+      const for_ = s(f), against = s(a), gap = for_ - 61;
+      const verdict = for_ >= 61 ? 'Majority' : (for_ > against ? 'Minority — passes if others abstain' : 'Short');
+      return { scenario, for_, against, gap, verdict, requires };
+    });
+    const anyMaj = out.some((r) => r.for_ >= 61 || r.for_ > r.against);
+    out.push({ scenario: 'Deadlock → new election', for_: 0, against: 0, gap: 0, verdict: anyMaj ? 'If every path above fails' : 'Likely', requires: 'No candidate forms a government within the 28+14+28+21 days; the Knesset dissolves and Israel votes again in about 90 days.' });
+    return out;
+  }
+});
+
+const ok = (id) => dash.data(id).status === 'ok';
+const one = (id) => ok(id) ? dash.data(id).data[0] : null;
+
+dash.draw('leadBloc', (el) => { const r = one('leader'); el.textContent = r ? r.bloc : '—'; });
+dash.draw('leadSeats', (el) => { const r = one('leader'); el.textContent = r ? String(r.seats) : '—'; });
+dash.draw('pct', (el) => { const r = one('status'); el.textContent = r ? String(r.counted_pct) : '—'; });
+dash.draw('asof', (el) => {
+  const r = one('status');
+  el.textContent = r ? new Date(r.as_of).toLocaleString('en-GB', { timeZone: 'Asia/Jerusalem', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+});
+
+const tile = (name, bloc) => dash.draw(name, (el) => {
+  const d = dash.data('blocs');
+  const r = d.status === 'ok' ? d.data.find((x) => x.bloc === bloc) : null;
+  el.textContent = r ? String(r.seats) : '—';
+});
+tile('tileNet', 'Netanyahu bloc'); tile('tileEis', 'Eisenkot bloc'); tile('tileArab', 'Arab parties');
+
+dash.draw('race', (el) => {
+  el.replaceChildren();
+  const d = dash.data('blocs');
+  if (d.status !== 'ok') { el.textContent = '—'; return; }
+  const W = Math.max(280, el.clientWidth), H = 64, top = 22;
+  const x = d3.scaleLinear([0, 120], [0, W]);
+  const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const order = ['Netanyahu bloc', 'Arab parties', 'Eisenkot bloc'];
+  const seg = d.data.slice().sort((a, b) => order.indexOf(a.bloc) - order.indexOf(b.bloc));
+  // Netanyahu from the left, Eisenkot from the right, Arab parties in between
+  const net = seg.find((r) => r.bloc === 'Netanyahu bloc'), eis = seg.find((r) => r.bloc === 'Eisenkot bloc'), arab = seg.find((r) => r.bloc === 'Arab parties');
+  const parts = [
+    { r: net, x0: 0, x1: net.seats },
+    { r: arab, x0: net.seats, x1: net.seats + arab.seats },
+    { r: eis, x0: 120 - eis.seats, x1: 120 }
+  ];
+  svg.selectAll('rect').data(parts).join('rect')
+    .attr('x', (p) => x(p.x0)).attr('y', top).attr('height', 24)
+    .attr('width', (p) => Math.max(0, x(p.x1) - x(p.x0) - 1))
+    .attr('rx', 3).attr('fill', (p) => window.knColor(p.r.bloc));
+  svg.selectAll('text.v').data(parts).join('text').attr('class', 'v')
+    .attr('x', (p) => (x(p.x0) + x(p.x1)) / 2).attr('y', top + 16).attr('text-anchor', 'middle')
+    .attr('fill', 'white').style('font-size', '12px').style('font-weight', 600)
+    .text((p) => p.r.seats);
+  [MAJ, 120 - MAJ].forEach((m, i) => {
+    svg.append('line').attr('x1', x(m)).attr('x2', x(m)).attr('y1', 14).attr('y2', top + 28)
+      .attr('stroke', 'var(--cds-chart-reference)').attr('stroke-width', 1.5).attr('stroke-dasharray', '3 3');
+  });
+  svg.append('text').attr('x', x(MAJ)).attr('y', 10).attr('text-anchor', 'middle')
+    .attr('fill', 'var(--color-fg-muted)').style('font-size', '11px').text('61');
+  svg.append('text').attr('x', x(120 - MAJ)).attr('y', 10).attr('text-anchor', 'middle')
+    .attr('fill', 'var(--color-fg-muted)').style('font-size', '11px').text('61');
+});
+
+dash.draw('parties', (el) => {
+  el.replaceChildren();
+  const d = dash.data('parties');
+  if (d.status !== 'ok') { el.textContent = '—'; return; }
+  const rows = d.data.map((r) => ({ ...r, seats: Number(r.seats) })).sort((a, b) => b.seats - a.seats);
+  const W = Math.max(260, el.clientWidth), bh = 22, gap = 8, H = rows.length * (bh + gap);
+  const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const probe = svg.append('text').style('font-size', '12px');
+  let lw = 0; rows.forEach((r) => { probe.text(r.party); lw = Math.max(lw, probe.node().getComputedTextLength()); });
+  probe.remove();
+  const L = lw + 10, R = 28;
+  const x = d3.scaleLinear([0, d3.max(rows, (r) => r.seats)], [0, W - L - R]);
+  const g = svg.selectAll('g').data(rows).join('g').attr('transform', (r, i) => `translate(0,${i * (bh + gap)})`);
+  g.append('text').attr('x', L - 8).attr('y', bh / 2 + 4).attr('text-anchor', 'end')
+    .attr('fill', 'var(--color-fg)').style('font-size', '12px').text((r) => r.party);
+  g.append('rect').attr('x', L).attr('y', 0).attr('height', bh).attr('rx', 3)
+    .attr('width', (r) => Math.max(1, x(r.seats))).attr('fill', (r) => window.knColor(r.bloc));
+  g.append('text').attr('x', (r) => L + x(r.seats) + 6).attr('y', bh / 2 + 4)
+    .attr('fill', 'var(--color-fg-muted)').style('font-size', '12px').style('font-variant-numeric', 'tabular-nums')
+    .text((r) => r.seats);
+  const tip = d3.select(el).append('div').attr('class', 'tip').style('display', 'none');
+  g.on('pointermove', (ev, r) => {
+    const [mx, my] = d3.pointer(ev, el);
+    tip.style('display', null).text(`${r.party} (${r.leader}) — ${r.seats} seats`);
+    const tw = tip.node().offsetWidth;
+    tip.style('left', `${Math.min(Math.max(0, mx + 10), el.clientWidth - tw)}px`).style('top', `${my + 12}px`);
+  }).on('pointerleave', () => tip.style('display', 'none'));
+});
+
+dash.draw('deadlock', (el) => {
+  const d = dash.data('odds');
+  const r = d.status === 'ok' ? d.data.find((x) => x.outcome.startsWith('Deadlock')) : null;
+  el.textContent = r ? String(r.probability) : '—';
+});
+
+dash.draw('oddsChart', (el) => {
+  el.replaceChildren();
+  const d = dash.data('odds');
+  if (d.status !== 'ok') { el.textContent = '—'; return; }
+  const rows = d.data.map((r) => ({ ...r, p: Number(r.probability) }));
+  const W = Math.max(260, el.clientWidth), bh = 22, gap = 12, H = rows.length * (bh + gap);
+  const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`);
+  const probe = svg.append('text').style('font-size', '12px');
+  let lw = 0; rows.forEach((r) => { probe.text(r.outcome); lw = Math.max(lw, probe.node().getComputedTextLength()); });
+  probe.remove();
+  const narrow = W < 520;
+  const L = narrow ? 0 : lw + 10, R = 40;
+  const rowH = narrow ? bh + 18 : bh;
+  svg.attr('viewBox', `0 0 ${W} ${rows.length * (rowH + gap)}`);
+  const x = d3.scaleLinear([0, 100], [0, W - L - R]);
+  const g = svg.selectAll('g').data(rows).join('g').attr('transform', (r, i) => `translate(0,${i * (rowH + gap)})`);
+  const by = narrow ? 18 : 0;
+  g.append('text').attr('x', narrow ? 0 : L - 8).attr('y', narrow ? 12 : bh / 2 + 4).attr('text-anchor', narrow ? 'start' : 'end')
+    .attr('fill', 'var(--color-fg)').style('font-size', '12px').text((r) => r.outcome);
+  g.append('rect').attr('x', L).attr('y', by).attr('height', bh).attr('rx', 3).attr('width', (r) => Math.max(1, x(r.p)))
+    .attr('fill', (r) => r.outcome.startsWith('Deadlock') ? 'var(--cds-chart-status-critical)' : 'var(--cds-chart-muted)');
+  g.append('text').attr('x', (r) => L + x(r.p) + 6).attr('y', by + bh / 2 + 4)
+    .attr('fill', 'var(--color-fg-muted)').style('font-size', '12px').style('font-variant-numeric', 'tabular-nums').text((r) => `${r.p}%`);
+  const tip = d3.select(el).append('div').attr('class', 'tip').style('display', 'none');
+  g.on('pointermove', (ev, r) => {
+    const [mx, my] = d3.pointer(ev, el);
+    tip.style('display', null).text(r.why);
+    const tw = tip.node().offsetWidth;
+    tip.style('left', `${Math.min(Math.max(0, mx + 10), el.clientWidth - tw)}px`).style('top', `${my + 12}px`);
+  }).on('pointerleave', () => tip.style('display', 'none'));
+});
+
+dash.draw('scenBody', (tb) => {
+  tb.replaceChildren();
+  const d = dash.data('scenarios');
+  if (d.status !== 'ok') return;
+  d.data.forEach((r) => {
+    const tr = tb.insertRow();
+    const dead = r.scenario.startsWith('Deadlock');
+    tr.insertCell().textContent = r.scenario;
+    const c1 = tr.insertCell(); c1.className = 'r'; c1.textContent = dead ? '' : String(r.for_);
+    const c2 = tr.insertCell(); c2.className = 'r'; c2.textContent = dead ? '' : String(r.against);
+    const c3 = tr.insertCell(); c3.className = 'r ' + (r.gap >= 0 ? 'ok' : 'bad'); c3.textContent = dead ? '' : (r.gap >= 0 ? `+${r.gap}` : String(r.gap));
+    const c4 = tr.insertCell(); c4.className = 'vd ' + (r.verdict === 'Majority' ? 'ok' : r.verdict === 'Short' ? 'bad' : ''); c4.textContent = r.verdict;
+    const c5 = tr.insertCell(); c5.className = 'req'; c5.textContent = r.requires;
+  });
+});
+
+dash.draw('belowBody', (tb) => {
+  tb.replaceChildren();
+  const d = dash.data('below');
+  if (d.status !== 'ok') return;
+  d.data.forEach((r) => {
+    const tr = tb.insertRow();
+    tr.insertCell().textContent = r.party;
+    tr.insertCell().textContent = r.leader;
+    const c = tr.insertCell(); c.className = 'r'; c.textContent = `${Number(r.vote_pct).toFixed(2)}%`;
+  });
+});
+</script>
+
+<p class="foot-src">Built with Claude. Sources: media reports of the Central Elections Committee count; official results at <a href="https://bechirot.gov.il" target="_blank" rel="noopener">bechirot.gov.il</a>.</p>
+</div>
+</body>
+</html>
